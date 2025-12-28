@@ -1,0 +1,107 @@
+/-
+  Chronos.Timestamp
+  Unix timestamp with nanosecond precision.
+-/
+
+namespace Chronos
+
+/-- Unix timestamp with nanosecond precision.
+    Represents seconds since the Unix epoch (1970-01-01 00:00:00 UTC)
+    plus additional nanoseconds. -/
+structure Timestamp where
+  /-- Seconds since Unix epoch. Can be negative for dates before 1970. -/
+  seconds : Int
+  /-- Additional nanoseconds [0, 999999999]. -/
+  nanoseconds : UInt32
+  deriving Repr, BEq, Inhabited
+
+namespace Timestamp
+
+/-- The Unix epoch: 1970-01-01 00:00:00 UTC -/
+def epoch : Timestamp := { seconds := 0, nanoseconds := 0 }
+
+/-- One billion nanoseconds per second -/
+private def nanosPerSecond : UInt32 := 1000000000
+
+-- ============================================================================
+-- FFI declarations
+-- ============================================================================
+
+/-- Raw FFI: Get current wall clock time as (seconds, nanoseconds) -/
+@[extern "chronos_now"]
+private opaque nowFFI : IO (Int × UInt32)
+
+-- ============================================================================
+-- Public API
+-- ============================================================================
+
+/-- Get the current wall clock time. -/
+def now : IO Timestamp := do
+  let (secs, nanos) ← nowFFI
+  return { seconds := secs, nanoseconds := nanos }
+
+/-- Create a timestamp from just seconds (nanoseconds = 0). -/
+def fromSeconds (seconds : Int) : Timestamp :=
+  { seconds, nanoseconds := 0 }
+
+/-- Convert to total nanoseconds since epoch. -/
+def toNanoseconds (ts : Timestamp) : Int :=
+  ts.seconds * 1000000000 + ts.nanoseconds.toNat
+
+/-- Create from total nanoseconds since epoch. -/
+def fromNanoseconds (nanos : Int) : Timestamp :=
+  let seconds := nanos / 1000000000
+  let remainingNanos := (nanos % 1000000000).toNat
+  { seconds, nanoseconds := remainingNanos.toUInt32 }
+
+/-- Convert to floating-point seconds (may lose precision). -/
+def toFloat (ts : Timestamp) : Float :=
+  Float.ofInt ts.seconds + ts.nanoseconds.toFloat / 1e9
+
+/-- Create from floating-point seconds. -/
+def fromFloat (f : Float) : Timestamp :=
+  let seconds := f.floor.toInt64.toInt
+  let nanos := ((f - f.floor) * 1e9).toUInt32
+  { seconds, nanoseconds := nanos }
+
+-- ============================================================================
+-- Arithmetic
+-- ============================================================================
+
+/-- Add seconds to a timestamp. -/
+def addSeconds (ts : Timestamp) (secs : Int) : Timestamp :=
+  { ts with seconds := ts.seconds + secs }
+
+/-- Subtract seconds from a timestamp. -/
+def subSeconds (ts : Timestamp) (secs : Int) : Timestamp :=
+  { ts with seconds := ts.seconds - secs }
+
+/-- Add nanoseconds to a timestamp (handles overflow into seconds). -/
+def addNanoseconds (ts : Timestamp) (nanos : Int) : Timestamp :=
+  let totalNanos := ts.toNanoseconds + nanos
+  fromNanoseconds totalNanos
+
+/-- Calculate the difference between two timestamps in nanoseconds. -/
+def diff (a b : Timestamp) : Int :=
+  a.toNanoseconds - b.toNanoseconds
+
+/-- Calculate the difference between two timestamps in seconds (truncated). -/
+def diffSeconds (a b : Timestamp) : Int :=
+  a.seconds - b.seconds
+
+-- ============================================================================
+-- Comparison
+-- ============================================================================
+
+instance : Ord Timestamp where
+  compare a b :=
+    match compare a.seconds b.seconds with
+    | .eq => compare a.nanoseconds b.nanoseconds
+    | other => other
+
+instance : LT Timestamp := ltOfOrd
+instance : LE Timestamp := leOfOrd
+
+end Timestamp
+
+end Chronos
