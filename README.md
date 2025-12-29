@@ -11,7 +11,7 @@ Chronos provides access to system wall clock time via FFI to POSIX time function
 Add to your `lakefile.lean`:
 
 ```lean
-require chronos from ".." / "chronos"  -- adjust path as needed
+require chronos from git "https://github.com/nathanial/chronos-lean" @ "v0.0.1"
 ```
 
 ## Quick Start
