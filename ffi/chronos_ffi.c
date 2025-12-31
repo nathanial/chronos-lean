@@ -207,3 +207,66 @@ LEAN_EXPORT lean_obj_res chronos_get_timezone_offset(lean_obj_arg world) {
     /* Box as small int - offset fits within range */
     return lean_io_result_mk_ok(lean_box((size_t)(int64_t)offset));
 }
+
+/* ============================================================================
+ * chronos_monotonic_now : IO (Int64 × UInt32)
+ *
+ * Get current monotonic clock time as (seconds, nanoseconds).
+ * Monotonic clocks are unaffected by NTP adjustments or DST changes.
+ * ============================================================================ */
+
+LEAN_EXPORT lean_obj_res chronos_monotonic_now(lean_obj_arg world) {
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        return mk_io_error("clock_gettime(CLOCK_MONOTONIC) failed");
+    }
+
+    lean_obj_res seconds = lean_int64_to_int(ts.tv_sec);
+    lean_obj_res nanos = lean_box_uint32((uint32_t)ts.tv_nsec);
+
+    return lean_io_result_mk_ok(mk_pair(seconds, nanos));
+}
+
+/* ============================================================================
+ * chronos_weekday : Int64 → IO UInt8
+ *
+ * Get the day of week (0=Sunday, 1=Monday, ..., 6=Saturday) for a timestamp.
+ * ============================================================================ */
+
+LEAN_EXPORT lean_obj_res chronos_weekday(lean_obj_arg seconds_obj, lean_obj_arg world) {
+    int64_t seconds = lean_int64_of_int(seconds_obj);
+    lean_dec(seconds_obj);
+
+    time_t t = (time_t)seconds;
+    struct tm tm_result;
+
+    if (gmtime_r(&t, &tm_result) == NULL) {
+        return mk_io_error("gmtime_r failed");
+    }
+
+    /* tm_wday: days since Sunday (0-6) */
+    return lean_io_result_mk_ok(lean_box((uint8_t)tm_result.tm_wday));
+}
+
+/* ============================================================================
+ * chronos_day_of_year : Int64 → IO UInt16
+ *
+ * Get the day of year (1-366) for a timestamp.
+ * ============================================================================ */
+
+LEAN_EXPORT lean_obj_res chronos_day_of_year(lean_obj_arg seconds_obj, lean_obj_arg world) {
+    int64_t seconds = lean_int64_of_int(seconds_obj);
+    lean_dec(seconds_obj);
+
+    time_t t = (time_t)seconds;
+    struct tm tm_result;
+
+    if (gmtime_r(&t, &tm_result) == NULL) {
+        return mk_io_error("gmtime_r failed");
+    }
+
+    /* tm_yday: days since January 1 (0-365), we add 1 for 1-366 */
+    uint16_t day_of_year = (uint16_t)(tm_result.tm_yday + 1);
+    return lean_io_result_mk_ok(lean_box(day_of_year));
+}

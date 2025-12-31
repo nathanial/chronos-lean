@@ -128,6 +128,9 @@ instance : Ord Duration where
 instance : LT Duration := ltOfOrd
 instance : LE Duration := leOfOrd
 
+instance : Hashable Duration where
+  hash d := hash d.nanoseconds
+
 /-- Check if the duration is zero. -/
 def isZero (d : Duration) : Bool := d.nanoseconds == 0
 

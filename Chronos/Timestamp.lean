@@ -123,6 +123,9 @@ instance : Ord Timestamp where
 instance : LT Timestamp := ltOfOrd
 instance : LE Timestamp := leOfOrd
 
+instance : Hashable Timestamp where
+  hash ts := mixHash (hash ts.seconds) (hash ts.nanoseconds)
+
 end Timestamp
 
 end Chronos

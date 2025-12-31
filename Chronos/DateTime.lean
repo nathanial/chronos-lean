@@ -192,6 +192,140 @@ instance : Ord DateTime where
 instance : LT DateTime := ltOfOrd
 instance : LE DateTime := leOfOrd
 
+instance : Hashable DateTime where
+  hash dt :=
+    let h1 := mixHash (hash dt.year) (hash dt.month)
+    let h2 := mixHash h1 (hash dt.day)
+    let h3 := mixHash h2 (hash dt.hour)
+    let h4 := mixHash h3 (hash dt.minute)
+    let h5 := mixHash h4 (hash dt.second)
+    mixHash h5 (hash dt.nanosecond)
+
+-- ============================================================================
+-- Weekday
+-- ============================================================================
+
+/-- Days of the week. -/
+inductive Weekday where
+  | sunday
+  | monday
+  | tuesday
+  | wednesday
+  | thursday
+  | friday
+  | saturday
+  deriving Repr, BEq, Inhabited
+
+namespace Weekday
+
+/-- Convert weekday to numeric value (0 = Sunday, 6 = Saturday). -/
+def toNat : Weekday → Nat
+  | sunday    => 0
+  | monday    => 1
+  | tuesday   => 2
+  | wednesday => 3
+  | thursday  => 4
+  | friday    => 5
+  | saturday  => 6
+
+/-- Convert numeric value to weekday (0 = Sunday, 6 = Saturday). -/
+def ofNat : Nat → Weekday
+  | 0 => sunday
+  | 1 => monday
+  | 2 => tuesday
+  | 3 => wednesday
+  | 4 => thursday
+  | 5 => friday
+  | _ => saturday
+
+/-- Short name (e.g., "Mon", "Tue"). -/
+def toShortString : Weekday → String
+  | sunday    => "Sun"
+  | monday    => "Mon"
+  | tuesday   => "Tue"
+  | wednesday => "Wed"
+  | thursday  => "Thu"
+  | friday    => "Fri"
+  | saturday  => "Sat"
+
+/-- Full name (e.g., "Monday", "Tuesday"). -/
+def toLongString : Weekday → String
+  | sunday    => "Sunday"
+  | monday    => "Monday"
+  | tuesday   => "Tuesday"
+  | wednesday => "Wednesday"
+  | thursday  => "Thursday"
+  | friday    => "Friday"
+  | saturday  => "Saturday"
+
+instance : ToString Weekday := ⟨Weekday.toLongString⟩
+
+/-- Check if this is a weekend day (Saturday or Sunday). -/
+def isWeekend : Weekday → Bool
+  | saturday => true
+  | sunday   => true
+  | _        => false
+
+/-- Check if this is a weekday (Monday through Friday). -/
+def isWeekday (w : Weekday) : Bool := !w.isWeekend
+
+instance : Hashable Weekday where
+  hash w := hash w.toNat
+
+end Weekday
+
+-- ============================================================================
+-- Day of Week / Day of Year
+-- ============================================================================
+
+/-- Raw FFI: Get weekday (0-6) from timestamp. -/
+@[extern "chronos_weekday"]
+private opaque weekdayFFI (seconds : Int) : IO UInt8
+
+/-- Raw FFI: Get day of year (1-366) from timestamp. -/
+@[extern "chronos_day_of_year"]
+private opaque dayOfYearFFI (seconds : Int) : IO UInt16
+
+/-- Get the day of the week for this DateTime. -/
+def weekday (dt : DateTime) : IO Weekday := do
+  let ts ← dt.toTimestamp
+  let wday ← weekdayFFI ts.seconds
+  return Weekday.ofNat wday.toNat
+
+/-- Check if this DateTime falls on a weekend. -/
+def isWeekend (dt : DateTime) : IO Bool := do
+  let w ← dt.weekday
+  return w.isWeekend
+
+/-- Check if this DateTime falls on a weekday. -/
+def isWeekday (dt : DateTime) : IO Bool := do
+  let w ← dt.weekday
+  return w.isWeekday
+
+/-- Get the day of year (1-366) for this DateTime. -/
+def dayOfYear (dt : DateTime) : IO UInt16 := do
+  let ts ← dt.toTimestamp
+  dayOfYearFFI ts.seconds
+
+/-- Get the ISO week number (1-53) for this DateTime.
+    Week 1 is the week containing the first Thursday of the year. -/
+def weekOfYear (dt : DateTime) : IO UInt8 := do
+  let doy ← dt.dayOfYear
+  let w ← dt.weekday
+  -- ISO week calculation: week 1 contains the first Thursday
+  -- Adjust day of year by weekday to find week number
+  let dowMondayBased := match w with
+    | .monday    => 0
+    | .tuesday   => 1
+    | .wednesday => 2
+    | .thursday  => 3
+    | .friday    => 4
+    | .saturday  => 5
+    | .sunday    => 6
+  -- Simple approximation: (dayOfYear + 6 - dayOfWeek) / 7
+  let weekNum := (doy.toNat + 6 - dowMondayBased) / 7
+  return UInt8.ofNat (max 1 weekNum)
+
 -- ============================================================================
 -- Parsing
 -- ============================================================================

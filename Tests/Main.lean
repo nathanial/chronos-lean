@@ -518,6 +518,203 @@ test "addDuration crosses day" := do
 end ArithmeticTests
 
 -- ============================================================================
+-- Monotonic Clock Tests
+-- ============================================================================
+
+namespace MonotonicTests
+
+testSuite "Chronos.Monotonic"
+
+test "MonotonicTime.now returns value" := do
+  let mt ← MonotonicTime.now
+  -- Should have non-negative seconds (since some arbitrary epoch)
+  shouldSatisfy (mt.seconds >= 0) "seconds >= 0"
+  -- Nanoseconds in valid range
+  shouldSatisfy (mt.nanoseconds < 1000000000) "nanoseconds < 1e9"
+
+test "MonotonicTime is monotonically increasing" := do
+  let a ← MonotonicTime.now
+  let b ← MonotonicTime.now
+  shouldSatisfy (b >= a) "b >= a (monotonic)"
+
+test "MonotonicTime.elapsed returns non-negative duration" := do
+  let start ← MonotonicTime.now
+  let elapsed ← start.elapsed
+  shouldSatisfy (!elapsed.isNegative) "elapsed is non-negative"
+
+test "MonotonicTime.duration calculates difference" := do
+  let a ← MonotonicTime.now
+  -- Do a tiny bit of work
+  let _ := (List.range 100).map (· * 2)
+  let b ← MonotonicTime.now
+  let d := MonotonicTime.duration b a
+  shouldSatisfy (!d.isNegative) "b - a is non-negative"
+
+test "time function returns result and duration" := do
+  let (result, elapsed) ← Chronos.time (pure 42)
+  result ≡ 42
+  shouldSatisfy (!elapsed.isNegative) "elapsed is non-negative"
+
+test "timeOnly returns duration" := do
+  let elapsed ← Chronos.timeOnly (pure ())
+  shouldSatisfy (!elapsed.isNegative) "elapsed is non-negative"
+
+test "benchmark returns average duration" := do
+  let avg ← Chronos.benchmark 5 (pure ())
+  shouldSatisfy (!avg.isNegative) "average is non-negative"
+
+test "benchmark with zero iterations returns zero" := do
+  let avg ← Chronos.benchmark 0 (pure ())
+  shouldSatisfy avg.isZero "zero iterations gives zero duration"
+
+#generate_tests
+
+end MonotonicTests
+
+-- ============================================================================
+-- Weekday Tests
+-- ============================================================================
+
+namespace WeekdayTests
+
+open DateTime (Weekday)
+
+testSuite "Chronos.Weekday"
+
+test "Weekday.toNat gives correct values" := do
+  Weekday.sunday.toNat ≡ 0
+  Weekday.monday.toNat ≡ 1
+  Weekday.tuesday.toNat ≡ 2
+  Weekday.wednesday.toNat ≡ 3
+  Weekday.thursday.toNat ≡ 4
+  Weekday.friday.toNat ≡ 5
+  Weekday.saturday.toNat ≡ 6
+
+test "Weekday.ofNat roundtrips" := do
+  for i in [:7] do
+    (Weekday.ofNat i).toNat ≡ i
+
+test "Weekday.ofNat wraps" := do
+  (Weekday.ofNat 7).toNat ≡ 6  -- wraps to saturday (default case)
+  (Weekday.ofNat 8).toNat ≡ 6  -- wraps to saturday (default case)
+
+test "isWeekend identifies weekend days" := do
+  shouldSatisfy Weekday.sunday.isWeekend "Sunday is weekend"
+  shouldSatisfy Weekday.saturday.isWeekend "Saturday is weekend"
+  shouldSatisfy (!Weekday.monday.isWeekend) "Monday is not weekend"
+  shouldSatisfy (!Weekday.friday.isWeekend) "Friday is not weekend"
+
+test "isWeekday identifies weekdays" := do
+  shouldSatisfy Weekday.monday.isWeekday "Monday is weekday"
+  shouldSatisfy Weekday.friday.isWeekday "Friday is weekday"
+  shouldSatisfy (!Weekday.sunday.isWeekday) "Sunday is not weekday"
+  shouldSatisfy (!Weekday.saturday.isWeekday) "Saturday is not weekday"
+
+test "Weekday.toString works" := do
+  s!"{Weekday.monday}" ≡ "Monday"
+  s!"{Weekday.friday}" ≡ "Friday"
+
+test "Weekday.toShortString works" := do
+  Weekday.monday.toShortString ≡ "Mon"
+  Weekday.wednesday.toShortString ≡ "Wed"
+
+test "DateTime.weekday for known date" := do
+  -- 2025-01-01 is a Wednesday
+  let dt : DateTime := { year := 2025, month := 1, day := 1, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let wd ← dt.weekday
+  wd ≡ Weekday.wednesday
+
+test "DateTime.weekday for epoch" := do
+  -- 1970-01-01 was a Thursday
+  let dt : DateTime := { year := 1970, month := 1, day := 1, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let wd ← dt.weekday
+  wd ≡ Weekday.thursday
+
+test "DateTime.isWeekend works" := do
+  -- 2025-01-04 is a Saturday
+  let sat : DateTime := { year := 2025, month := 1, day := 4, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let isSatWeekend ← sat.isWeekend
+  shouldSatisfy isSatWeekend "Saturday is weekend"
+  -- 2025-01-06 is a Monday
+  let mon : DateTime := { year := 2025, month := 1, day := 6, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let isMonWeekend ← mon.isWeekend
+  shouldSatisfy (!isMonWeekend) "Monday is not weekend"
+
+test "DateTime.dayOfYear for first day" := do
+  let dt : DateTime := { year := 2025, month := 1, day := 1, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let doy ← dt.dayOfYear
+  doy ≡ 1
+
+test "DateTime.dayOfYear for last day of year" := do
+  let dt : DateTime := { year := 2024, month := 12, day := 31, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let doy ← dt.dayOfYear
+  doy ≡ 366  -- 2024 is a leap year
+
+test "DateTime.dayOfYear for non-leap year" := do
+  let dt : DateTime := { year := 2025, month := 12, day := 31, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let doy ← dt.dayOfYear
+  doy ≡ 365
+
+test "DateTime.weekOfYear for first week" := do
+  let dt : DateTime := { year := 2025, month := 1, day := 1, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  let woy ← dt.weekOfYear
+  shouldSatisfy (woy >= 1 && woy <= 53) "week of year in range 1-53"
+
+#generate_tests
+
+end WeekdayTests
+
+-- ============================================================================
+-- Hashable Instance Tests
+-- ============================================================================
+
+namespace HashableTests
+
+open DateTime (Weekday)
+
+testSuite "Chronos.Hashable"
+
+test "Duration hash is consistent" := do
+  let d1 := Duration.fromHours 5
+  let d2 := Duration.fromHours 5
+  (hash d1) ≡ (hash d2)
+
+test "Duration hash differs for different values" := do
+  let d1 := Duration.fromHours 5
+  let d2 := Duration.fromHours 6
+  shouldSatisfy (hash d1 != hash d2) "different durations have different hashes"
+
+test "Timestamp hash is consistent" := do
+  let ts1 := Timestamp.fromSeconds 1234567890
+  let ts2 := Timestamp.fromSeconds 1234567890
+  (hash ts1) ≡ (hash ts2)
+
+test "Timestamp hash differs for different values" := do
+  let ts1 := Timestamp.fromSeconds 1000
+  let ts2 := Timestamp.fromSeconds 2000
+  shouldSatisfy (hash ts1 != hash ts2) "different timestamps have different hashes"
+
+test "DateTime hash is consistent" := do
+  let dt1 : DateTime := { year := 2025, month := 1, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  let dt2 : DateTime := { year := 2025, month := 1, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  (hash dt1) ≡ (hash dt2)
+
+test "DateTime hash differs for different values" := do
+  let dt1 : DateTime := { year := 2025, month := 1, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  let dt2 : DateTime := { year := 2025, month := 1, day := 16, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  shouldSatisfy (hash dt1 != hash dt2) "different datetimes have different hashes"
+
+test "Weekday hash is consistent" := do
+  (hash Weekday.monday) ≡ (hash Weekday.monday)
+
+test "Weekday hash differs for different days" := do
+  shouldSatisfy (hash Weekday.monday != hash Weekday.friday) "different weekdays have different hashes"
+
+#generate_tests
+
+end HashableTests
+
+-- ============================================================================
 -- Main
 -- ============================================================================
 

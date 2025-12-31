@@ -40,6 +40,7 @@
 import Chronos.Duration
 import Chronos.Timestamp
 import Chronos.DateTime
+import Chronos.Monotonic
 
 namespace Chronos
 
@@ -67,5 +68,13 @@ def hours (n : Int) : Duration := Duration.fromHours n
 
 /-- Create a duration from days. -/
 def days (n : Int) : Duration := Duration.fromDays n
+
+-- Monotonic timing utilities
+
+/-- Time an IO action, returning the result and elapsed duration. -/
+def timeAction (action : IO α) : IO (α × Duration) := time action
+
+/-- Run an action N times and return the average duration. -/
+def benchmarkAction (n : Nat) (action : IO α) : IO Duration := benchmark n action
 
 end Chronos
