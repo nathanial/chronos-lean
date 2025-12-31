@@ -3,6 +3,8 @@
   Unix timestamp with nanosecond precision.
 -/
 
+import Chronos.Duration
+
 namespace Chronos
 
 /-- Unix timestamp with nanosecond precision.
@@ -88,6 +90,25 @@ def diff (a b : Timestamp) : Int :=
 /-- Calculate the difference between two timestamps in seconds (truncated). -/
 def diffSeconds (a b : Timestamp) : Int :=
   a.seconds - b.seconds
+
+-- ============================================================================
+-- Duration Arithmetic
+-- ============================================================================
+
+/-- Add a duration to a timestamp. -/
+def addDuration (ts : Timestamp) (d : Duration) : Timestamp :=
+  fromNanoseconds (ts.toNanoseconds + d.nanoseconds)
+
+/-- Subtract a duration from a timestamp. -/
+def subDuration (ts : Timestamp) (d : Duration) : Timestamp :=
+  fromNanoseconds (ts.toNanoseconds - d.nanoseconds)
+
+/-- Calculate the duration between two timestamps (a - b). -/
+def duration (a b : Timestamp) : Duration :=
+  Duration.fromNanoseconds (a.toNanoseconds - b.toNanoseconds)
+
+instance : HAdd Timestamp Duration Timestamp where hAdd := addDuration
+instance : HSub Timestamp Duration Timestamp where hSub := subDuration
 
 -- ============================================================================
 -- Comparison

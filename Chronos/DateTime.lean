@@ -192,6 +192,282 @@ instance : Ord DateTime where
 instance : LT DateTime := ltOfOrd
 instance : LE DateTime := leOfOrd
 
+-- ============================================================================
+-- Parsing
+-- ============================================================================
+
+/-- Result type for parsing operations. -/
+abbrev ParseResult (α : Type) := Except String α
+
+/-- Helper to convert Option to Except with error message. -/
+private def optionToExcept (o : Option α) (msg : String) : Except String α :=
+  match o with
+  | some a => .ok a
+  | none => .error msg
+
+/-- Parse exactly n decimal digits starting at position, return (value, newPos). -/
+private def parseDigits (s : String) (start : Nat) (count : Nat) : Option (Nat × Nat) :=
+  if start + count > s.length then none
+  else
+    let chars := (List.range count).map fun i => s.get ⟨start + i⟩
+    if chars.all Char.isDigit then
+      let value := chars.foldl (fun acc c => acc * 10 + (c.toNat - '0'.toNat)) 0
+      some (value, start + count)
+    else none
+
+/-- Expect a specific character at position, return new position. -/
+private def expectChar (s : String) (pos : Nat) (c : Char) : Option Nat :=
+  if pos < s.length && s.get ⟨pos⟩ == c then some (pos + 1) else none
+
+/-- Parse fractional seconds (.NNNNNNNNN), returning (nanoseconds, newPos). -/
+private def parseFractionalSeconds (s : String) (pos : Nat) : Nat × Nat :=
+  -- Read up to 9 digits iteratively
+  let rec go (p : Nat) (count : Nat) (acc : Nat) : Nat × Nat :=
+    if count >= 9 then (acc, p)
+    else if p >= s.length then
+      -- Pad remaining with zeros
+      let remaining := 9 - count
+      (acc * (10 ^ remaining), p)
+    else
+      let c := s.get ⟨p⟩
+      if c.isDigit then
+        go (p + 1) (count + 1) (acc * 10 + (c.toNat - '0'.toNat))
+      else
+        -- Pad remaining with zeros
+        let remaining := 9 - count
+        (acc * (10 ^ remaining), p)
+  termination_by (9 - count)
+  go pos 0 0
+
+/-- Parse ISO 8601 date/time string.
+    Accepted formats:
+    - "YYYY-MM-DD" (date only, time defaults to 00:00:00)
+    - "YYYY-MM-DDTHH:MM:SS" (with 'T' separator)
+    - "YYYY-MM-DD HH:MM:SS" (with space separator)
+    - "YYYY-MM-DDTHH:MM:SS.NNNNNNNNN" (with fractional seconds)
+    - Timezone suffixes like "Z" or "+05:00" are parsed but ignored (DateTime is timezone-naive). -/
+def parseIso8601 (s : String) : ParseResult DateTime := do
+  let s := s.trim
+  if s.isEmpty then throw "empty input"
+
+  -- Parse year (4 digits)
+  let (year, pos) ← optionToExcept (parseDigits s 0 4) "expected 4-digit year"
+
+  -- Parse -MM-DD
+  let pos ← optionToExcept (expectChar s pos '-') "expected '-' after year"
+  let (month, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit month"
+  let pos ← optionToExcept (expectChar s pos '-') "expected '-' after month"
+  let (day, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit day"
+
+  -- Validate date components
+  if month < 1 || month > 12 then throw s!"invalid month: {month}"
+  let maxDay := daysInMonth (Int.toInt32 year) (UInt8.ofNat month)
+  if day < 1 || day > maxDay.toNat then throw s!"invalid day: {day} for month {month}"
+
+  -- Check if we have time component
+  if pos >= s.length then
+    -- Date only
+    return { year := Int.toInt32 year, month := UInt8.ofNat month, day := UInt8.ofNat day,
+             hour := 0, minute := 0, second := 0, nanosecond := 0 }
+
+  -- Parse T or space separator
+  let separator := s.get ⟨pos⟩
+  if separator != 'T' && separator != ' ' then
+    throw s!"expected 'T' or space after date, got '{separator}'"
+  let pos := pos + 1
+
+  -- Parse HH:MM:SS
+  let (hour, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit hour"
+  if hour > 23 then throw s!"invalid hour: {hour}"
+  let pos ← optionToExcept (expectChar s pos ':') "expected ':' after hour"
+  let (minute, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit minute"
+  if minute > 59 then throw s!"invalid minute: {minute}"
+  let pos ← optionToExcept (expectChar s pos ':') "expected ':' after minute"
+  let (second, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit second"
+  if second > 59 then throw s!"invalid second: {second}"
+
+  -- Parse optional fractional seconds
+  let (nanosecond, _pos) :=
+    if pos < s.length && s.get ⟨pos⟩ == '.' then
+      parseFractionalSeconds s (pos + 1)
+    else (0, pos)
+
+  -- Note: Timezone offset (Z, +HH:MM, -HH:MM) is ignored for now
+  -- DateTime is timezone-naive; proper handling requires OffsetDateTime type
+
+  return { year := Int.toInt32 year, month := UInt8.ofNat month, day := UInt8.ofNat day,
+           hour := UInt8.ofNat hour, minute := UInt8.ofNat minute, second := UInt8.ofNat second,
+           nanosecond := UInt32.ofNat nanosecond }
+
+/-- Parse date only: "YYYY-MM-DD".
+    Time components default to 00:00:00. -/
+def parseDate (s : String) : ParseResult DateTime :=
+  parseIso8601 s
+
+/-- Parse time only: "HH:MM:SS" or "HH:MM:SS.NNNNNNNNN".
+    Date components default to 1970-01-01 (Unix epoch). -/
+def parseTime (s : String) : ParseResult DateTime := do
+  let s := s.trim
+  if s.length < 8 then throw "expected at least HH:MM:SS format"
+
+  -- Parse HH:MM:SS
+  let (hour, pos) ← optionToExcept (parseDigits s 0 2) "expected 2-digit hour"
+  if hour > 23 then throw s!"invalid hour: {hour}"
+  let pos ← optionToExcept (expectChar s pos ':') "expected ':' after hour"
+  let (minute, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit minute"
+  if minute > 59 then throw s!"invalid minute: {minute}"
+  let pos ← optionToExcept (expectChar s pos ':') "expected ':' after minute"
+  let (second, pos) ← optionToExcept (parseDigits s pos 2) "expected 2-digit second"
+  if second > 59 then throw s!"invalid second: {second}"
+
+  -- Parse optional fractional seconds
+  let (nanosecond, _) :=
+    if pos < s.length && s.get ⟨pos⟩ == '.' then
+      parseFractionalSeconds s (pos + 1)
+    else (0, pos)
+
+  return { year := 1970, month := 1, day := 1,
+           hour := UInt8.ofNat hour, minute := UInt8.ofNat minute, second := UInt8.ofNat second,
+           nanosecond := UInt32.ofNat nanosecond }
+
+-- ============================================================================
+-- Arithmetic (Pure implementations)
+-- ============================================================================
+
+/-- Convert date to Julian Day Number (days since November 24, 4714 BC).
+    Used for efficient date arithmetic. -/
+private def toJulianDayNumber (dt : DateTime) : Int :=
+  let y := dt.year.toInt
+  let m := dt.month.toNat
+  let d := dt.day.toNat
+  -- Algorithm from Wikipedia: Julian day
+  let a := (14 - m) / 12
+  let yAdj := y + 4800 - a
+  let mAdj := m + 12 * a - 3
+  d + (153 * mAdj + 2) / 5 + 365 * yAdj + yAdj / 4 - yAdj / 100 + yAdj / 400 - 32045
+
+/-- Convert Julian Day Number back to date components.
+    Time components are preserved from the original DateTime. -/
+private def fromJulianDayNumber (jdn : Int) (hour minute second : UInt8) (nanosecond : UInt32) : DateTime :=
+  -- Inverse algorithm
+  let a := jdn + 32044
+  let b := (4 * a + 3) / 146097
+  let c := a - 146097 * b / 4
+  let d := (4 * c + 3) / 1461
+  let e := c - 1461 * d / 4
+  let m := (5 * e + 2) / 153
+  let day := e - (153 * m + 2) / 5 + 1
+  let month := m + 3 - 12 * (m / 10)
+  let year := 100 * b + d - 4800 + m / 10
+  { year := Int.toInt32 year, month := UInt8.ofNat month.toNat, day := UInt8.ofNat day.toNat,
+    hour, minute, second, nanosecond }
+
+/-- Add days to a DateTime (pure, no IO). -/
+def addDaysPure (dt : DateTime) (days : Int) : DateTime :=
+  let jdn := toJulianDayNumber dt + days
+  fromJulianDayNumber jdn dt.hour dt.minute dt.second dt.nanosecond
+
+/-- Add months to a DateTime (pure, no IO).
+    If the resulting day is invalid (e.g., Jan 31 + 1 month = Feb 31),
+    it is clamped to the last valid day of the month. -/
+def addMonthsPure (dt : DateTime) (months : Int) : DateTime :=
+  let totalMonths := dt.year.toInt * 12 + dt.month.toNat - 1 + months
+  let newYear := totalMonths / 12
+  let newMonthRaw := totalMonths % 12
+  -- Handle negative modulo: Lean's % can return negative for negative dividends
+  let newMonth := if newMonthRaw < 0 then newMonthRaw + 12 else newMonthRaw
+  let newMonth := newMonth + 1  -- Convert from 0-indexed to 1-indexed
+  let newYear := if newMonthRaw < 0 then newYear - 1 else newYear
+  let maxDay := daysInMonth (Int.toInt32 newYear) (UInt8.ofNat newMonth.toNat)
+  let clampedDay := min dt.day maxDay
+  { dt with year := Int.toInt32 newYear, month := UInt8.ofNat newMonth.toNat, day := clampedDay }
+
+/-- Add years to a DateTime (pure, no IO).
+    Equivalent to adding 12 * years months. -/
+def addYearsPure (dt : DateTime) (years : Int) : DateTime :=
+  addMonthsPure dt (years * 12)
+
+/-- Add hours to a DateTime, with proper day overflow (pure, no IO). -/
+def addHoursPure (dt : DateTime) (hours : Int) : DateTime :=
+  let totalHours : Int := dt.hour.toNat + hours
+  let dayDelta := totalHours / 24
+  let newHourRaw := totalHours % 24
+  let (dayDelta, newHour) :=
+    if newHourRaw < 0 then (dayDelta - 1, newHourRaw + 24)
+    else (dayDelta, newHourRaw)
+  let newDt := addDaysPure dt dayDelta
+  { newDt with hour := UInt8.ofNat newHour.toNat }
+
+/-- Add minutes to a DateTime, with proper hour/day overflow (pure, no IO). -/
+def addMinutesPure (dt : DateTime) (minutes : Int) : DateTime :=
+  let totalMinutes : Int := dt.minute.toNat + minutes
+  let hourDelta := totalMinutes / 60
+  let newMinuteRaw := totalMinutes % 60
+  let (hourDelta, newMinute) :=
+    if newMinuteRaw < 0 then (hourDelta - 1, newMinuteRaw + 60)
+    else (hourDelta, newMinuteRaw)
+  let newDt := addHoursPure dt hourDelta
+  { newDt with minute := UInt8.ofNat newMinute.toNat }
+
+/-- Add seconds to a DateTime, with proper minute/hour/day overflow (pure, no IO). -/
+def addSecondsPure (dt : DateTime) (seconds : Int) : DateTime :=
+  let totalSeconds : Int := dt.second.toNat + seconds
+  let minuteDelta := totalSeconds / 60
+  let newSecondRaw := totalSeconds % 60
+  let (minuteDelta, newSecond) :=
+    if newSecondRaw < 0 then (minuteDelta - 1, newSecondRaw + 60)
+    else (minuteDelta, newSecondRaw)
+  let newDt := addMinutesPure dt minuteDelta
+  { newDt with second := UInt8.ofNat newSecond.toNat }
+
+/-- Add a Duration to a DateTime (pure, no IO). -/
+def addDurationPure (dt : DateTime) (d : Duration) : DateTime :=
+  -- Convert duration to seconds and remaining nanoseconds
+  let totalNanos : Int := dt.nanosecond.toNat + (d.nanoseconds % 1000000000)
+  let secDelta := d.nanoseconds / 1000000000
+  let (secDelta, newNano) :=
+    if totalNanos < 0 then
+      (secDelta - 1, totalNanos + 1000000000)
+    else if totalNanos >= 1000000000 then
+      (secDelta + 1, totalNanos - 1000000000)
+    else
+      (secDelta, totalNanos)
+  let newDt := addSecondsPure dt secDelta
+  { newDt with nanosecond := UInt32.ofNat newNano.toNat }
+
+-- ============================================================================
+-- Arithmetic (IO wrappers for API consistency)
+-- ============================================================================
+
+/-- Add days to a DateTime. -/
+def addDays (dt : DateTime) (days : Int) : IO DateTime :=
+  pure (addDaysPure dt days)
+
+/-- Add months to a DateTime.
+    If the resulting day is invalid, it is clamped to the last valid day. -/
+def addMonths (dt : DateTime) (months : Int) : IO DateTime :=
+  pure (addMonthsPure dt months)
+
+/-- Add years to a DateTime. -/
+def addYears (dt : DateTime) (years : Int) : IO DateTime :=
+  pure (addYearsPure dt years)
+
+/-- Add hours to a DateTime. -/
+def addHours (dt : DateTime) (hours : Int) : IO DateTime :=
+  pure (addHoursPure dt hours)
+
+/-- Add minutes to a DateTime. -/
+def addMinutes (dt : DateTime) (minutes : Int) : IO DateTime :=
+  pure (addMinutesPure dt minutes)
+
+/-- Add seconds to a DateTime. -/
+def addSeconds (dt : DateTime) (seconds : Int) : IO DateTime :=
+  pure (addSecondsPure dt seconds)
+
+/-- Add a Duration to a DateTime. -/
+def addDuration (dt : DateTime) (d : Duration) : IO DateTime :=
+  pure (addDurationPure dt d)
+
 end DateTime
 
 end Chronos

@@ -20,9 +20,24 @@
     -- Get current UTC date/time
     let utc ← Chronos.DateTime.nowUtc
     IO.println s!"UTC time: {utc}"
+
+    -- Work with durations
+    let oneHour := Chronos.Duration.fromHours 1
+    let later := ts + oneHour
+    IO.println s!"One hour later: {later.seconds}"
+
+    -- Parse date/time strings
+    match Chronos.DateTime.parseIso8601 "2025-01-15T14:30:00" with
+    | .ok dt => IO.println s!"Parsed: {dt}"
+    | .error e => IO.println s!"Parse error: {e}"
+
+    -- Date arithmetic
+    let tomorrow := dt.addDaysPure 1
+    IO.println s!"Tomorrow: {tomorrow}"
   ```
 -/
 
+import Chronos.Duration
 import Chronos.Timestamp
 import Chronos.DateTime
 
@@ -38,5 +53,19 @@ def nowLocal : IO DateTime := DateTime.nowLocal
 
 /-- Get the current UTC date/time. -/
 def nowUtc : IO DateTime := DateTime.nowUtc
+
+-- Duration convenience constructors
+
+/-- Create a duration from seconds. -/
+def seconds (n : Int) : Duration := Duration.fromSeconds n
+
+/-- Create a duration from minutes. -/
+def minutes (n : Int) : Duration := Duration.fromMinutes n
+
+/-- Create a duration from hours. -/
+def hours (n : Int) : Duration := Duration.fromHours n
+
+/-- Create a duration from days. -/
+def days (n : Int) : Duration := Duration.fromDays n
 
 end Chronos
