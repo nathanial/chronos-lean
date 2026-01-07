@@ -642,6 +642,20 @@ def addSeconds (dt : DateTime) (seconds : Int) : IO DateTime :=
 def addDuration (dt : DateTime) (d : Duration) : IO DateTime :=
   pure (addDurationPure dt d)
 
+-- ============================================================================
+-- JSON Serialization
+-- ============================================================================
+
+instance : Lean.ToJson DateTime where
+  toJson dt := Lean.Json.str dt.toIso8601
+
+instance : Lean.FromJson DateTime where
+  fromJson? j := do
+    let s ← j.getStr?
+    match parseIso8601 s with
+    | .ok dt => pure dt
+    | .error e => throw e
+
 end DateTime
 
 end Chronos

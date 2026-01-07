@@ -4,9 +4,11 @@
 
 import Chronos
 import Crucible
+import Lean.Data.Json
 
 open Crucible
 open Chronos
+open Lean (Json ToJson FromJson toJson fromJson?)
 
 -- ============================================================================
 -- Timestamp Tests
@@ -53,6 +55,39 @@ test "comparison works" := do
 
 test "toNanoseconds and fromNanoseconds roundtrip" := do
   let ts := { seconds := 1234, nanoseconds := 567890123 : Timestamp }
+  let nanos := ts.toNanoseconds
+  let ts2 := Timestamp.fromNanoseconds nanos
+  ts2.seconds ≡ ts.seconds
+  ts2.nanoseconds ≡ ts.nanoseconds
+
+test "fromNanoseconds handles negative values (pre-epoch)" := do
+  -- -1 nanosecond should be second -1 with 999999999 nanoseconds
+  let ts := Timestamp.fromNanoseconds (-1)
+  ts.seconds ≡ -1
+  ts.nanoseconds ≡ 999999999
+
+test "fromNanoseconds handles negative whole seconds" := do
+  -- -1 second (in nanos) should be second -1 with 0 nanoseconds
+  let ts := Timestamp.fromNanoseconds (-1000000000)
+  ts.seconds ≡ -1
+  ts.nanoseconds ≡ 0
+
+test "fromNanoseconds handles negative with fractional part" := do
+  -- -1.5 seconds = -2 seconds + 500000000 nanoseconds
+  let ts := Timestamp.fromNanoseconds (-1500000000)
+  ts.seconds ≡ -2
+  ts.nanoseconds ≡ 500000000
+
+test "negative timestamp roundtrip" := do
+  let ts := { seconds := -100, nanoseconds := 123456789 : Timestamp }
+  let nanos := ts.toNanoseconds
+  let ts2 := Timestamp.fromNanoseconds nanos
+  ts2.seconds ≡ ts.seconds
+  ts2.nanoseconds ≡ ts.nanoseconds
+
+test "pre-epoch date (1960) roundtrip" := do
+  -- 1960-01-01 is roughly -315619200 seconds from epoch
+  let ts := { seconds := -315619200, nanoseconds := 0 : Timestamp }
   let nanos := ts.toNanoseconds
   let ts2 := Timestamp.fromNanoseconds nanos
   ts2.seconds ≡ ts.seconds
@@ -794,6 +829,82 @@ test "Weekday hash differs for different days" := do
 #generate_tests
 
 end HashableTests
+
+-- ============================================================================
+-- JSON Serialization Tests
+-- ============================================================================
+
+namespace JsonTests
+
+testSuite "Chronos.Json"
+
+test "Duration JSON roundtrip" := do
+  let d := Duration.fromHours 5
+  let json := toJson d
+  match (fromJson? json : Except String Duration) with
+  | .ok d2 => d2.nanoseconds ≡ d.nanoseconds
+  | .error e => throw (IO.userError s!"fromJson failed: {e}")
+
+test "Duration negative JSON roundtrip" := do
+  let d := Duration.fromSeconds (-3600)
+  let json := toJson d
+  match (fromJson? json : Except String Duration) with
+  | .ok d2 => d2.nanoseconds ≡ d.nanoseconds
+  | .error e => throw (IO.userError s!"fromJson failed: {e}")
+
+test "Timestamp JSON roundtrip" := do
+  let ts : Timestamp := { seconds := 1234567890, nanoseconds := 123456789 }
+  let json := toJson ts
+  match (fromJson? json : Except String Timestamp) with
+  | .ok ts2 =>
+    ts2.seconds ≡ ts.seconds
+    ts2.nanoseconds ≡ ts.nanoseconds
+  | .error e => throw (IO.userError s!"fromJson failed: {e}")
+
+test "Timestamp negative JSON roundtrip" := do
+  let ts : Timestamp := { seconds := -1000, nanoseconds := 500000000 }
+  let json := toJson ts
+  match (fromJson? json : Except String Timestamp) with
+  | .ok ts2 =>
+    ts2.seconds ≡ ts.seconds
+    ts2.nanoseconds ≡ ts.nanoseconds
+  | .error e => throw (IO.userError s!"fromJson failed: {e}")
+
+test "DateTime JSON roundtrip" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 14, minute := 30, second := 45, nanosecond := 0 }
+  let json := toJson dt
+  match (fromJson? json : Except String DateTime) with
+  | .ok dt2 =>
+    dt2.year ≡ dt.year
+    dt2.month ≡ dt.month
+    dt2.day ≡ dt.day
+    dt2.hour ≡ dt.hour
+    dt2.minute ≡ dt.minute
+    dt2.second ≡ dt.second
+  | .error e => throw (IO.userError s!"fromJson failed: {e}")
+
+test "DateTime JSON serializes as ISO 8601" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 14, minute := 30, second := 45, nanosecond := 0 }
+  let json := toJson dt
+  match json with
+  | .str s => s ≡ "2025-06-15T14:30:45"
+  | _ => throw (IO.userError "expected JSON string")
+
+test "DateTime JSON parses ISO 8601" := do
+  let json := Json.str "2025-12-25T08:00:00"
+  match (fromJson? json : Except String DateTime) with
+  | .ok dt =>
+    dt.year ≡ 2025
+    dt.month ≡ 12
+    dt.day ≡ 25
+    dt.hour ≡ 8
+    dt.minute ≡ 0
+    dt.second ≡ 0
+  | .error e => throw (IO.userError s!"fromJson failed: {e}")
+
+#generate_tests
+
+end JsonTests
 
 -- ============================================================================
 -- Main

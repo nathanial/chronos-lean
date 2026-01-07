@@ -3,6 +3,8 @@
   Time span representation with nanosecond precision.
 -/
 
+import Lean.Data.Json
+
 namespace Chronos
 
 /-- A duration representing a time span with nanosecond precision.
@@ -208,6 +210,18 @@ def toIso8601 (d : Duration) : String :=
 
 instance : ToString Duration where
   toString := toHumanString
+
+-- ============================================================================
+-- JSON Serialization
+-- ============================================================================
+
+instance : Lean.ToJson Duration where
+  toJson d := Lean.Json.num (Lean.JsonNumber.fromInt d.nanoseconds)
+
+instance : Lean.FromJson Duration where
+  fromJson? j := do
+    let n ← j.getInt?
+    return { nanoseconds := n }
 
 end Duration
 

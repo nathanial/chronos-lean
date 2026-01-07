@@ -50,11 +50,13 @@ def fromSeconds (seconds : Int) : Timestamp :=
 def toNanoseconds (ts : Timestamp) : Int :=
   ts.seconds * nanosPerSecond + ts.nanoseconds.toNat
 
-/-- Create from total nanoseconds since epoch. -/
+/-- Create from total nanoseconds since epoch.
+    Handles negative values correctly for pre-epoch dates. -/
 def fromNanoseconds (nanos : Int) : Timestamp :=
-  let seconds := nanos / nanosPerSecond
-  let remainingNanos := (nanos % nanosPerSecond).toNat
-  { seconds, nanoseconds := remainingNanos.toUInt32 }
+  -- Use floor division to ensure nanoseconds is always non-negative
+  let seconds := nanos.fdiv nanosPerSecond
+  let remainingNanos := nanos.fmod nanosPerSecond
+  { seconds, nanoseconds := remainingNanos.toNat.toUInt32 }
 
 /-- Convert to floating-point seconds (may lose precision). -/
 def toFloat (ts : Timestamp) : Float :=
@@ -134,6 +136,22 @@ instance (a b : Timestamp) : Decidable (a ≤ b) :=
 
 instance : Hashable Timestamp where
   hash ts := mixHash (hash ts.seconds) (hash ts.nanoseconds)
+
+-- ============================================================================
+-- JSON Serialization
+-- ============================================================================
+
+instance : Lean.ToJson Timestamp where
+  toJson ts := Lean.Json.mkObj [
+    ("seconds", Lean.Json.num (Lean.JsonNumber.fromInt ts.seconds)),
+    ("nanoseconds", Lean.Json.num (Lean.JsonNumber.fromNat ts.nanoseconds.toNat))
+  ]
+
+instance : Lean.FromJson Timestamp where
+  fromJson? j := do
+    let seconds ← j.getObjValAs? Int "seconds"
+    let nanoseconds ← j.getObjValAs? Nat "nanoseconds"
+    return { seconds, nanoseconds := nanoseconds.toUInt32 }
 
 end Timestamp
 
