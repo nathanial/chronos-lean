@@ -24,7 +24,7 @@ structure DateTime where
   second : UInt8
   /-- Nanosecond of second [0, 999999999]. -/
   nanosecond : UInt32
-  deriving Repr, BEq, Inhabited
+  deriving Repr, BEq, Inhabited, DecidableEq
 
 namespace DateTime
 
@@ -189,8 +189,17 @@ instance : Ord DateTime where
       | other => other
     | other => other
 
-instance : LT DateTime := ltOfOrd
-instance : LE DateTime := leOfOrd
+instance : LT DateTime where
+  lt a b := compare a b == .lt
+
+instance : LE DateTime where
+  le a b := compare a b != .gt
+
+instance (a b : DateTime) : Decidable (a < b) :=
+  if h : compare a b == .lt then isTrue h else isFalse h
+
+instance (a b : DateTime) : Decidable (a ≤ b) :=
+  if h : compare a b != .gt then isTrue h else isFalse h
 
 instance : Hashable DateTime where
   hash dt :=
@@ -214,7 +223,7 @@ inductive Weekday where
   | thursday
   | friday
   | saturday
-  deriving Repr, BEq, Inhabited
+  deriving Repr, BEq, Inhabited, DecidableEq
 
 namespace Weekday
 
@@ -229,7 +238,7 @@ def toNat : Weekday → Nat
   | saturday  => 6
 
 /-- Convert numeric value to weekday (0 = Sunday, 6 = Saturday). -/
-def ofNat : Nat → Weekday
+def fromNat : Nat → Weekday
   | 0 => sunday
   | 1 => monday
   | 2 => tuesday
@@ -290,7 +299,7 @@ private opaque dayOfYearFFI (seconds : Int) : IO UInt16
 def weekday (dt : DateTime) : IO Weekday := do
   let ts ← dt.toTimestamp
   let wday ← weekdayFFI ts.seconds
-  return Weekday.ofNat wday.toNat
+  return Weekday.fromNat wday.toNat
 
 /-- Check if this DateTime falls on a weekend. -/
 def isWeekend (dt : DateTime) : IO Bool := do

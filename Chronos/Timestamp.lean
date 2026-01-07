@@ -15,7 +15,7 @@ structure Timestamp where
   seconds : Int
   /-- Additional nanoseconds [0, 999999999]. -/
   nanoseconds : UInt32
-  deriving Repr, BEq, Inhabited
+  deriving Repr, BEq, Inhabited, DecidableEq
 
 namespace Timestamp
 
@@ -120,8 +120,17 @@ instance : Ord Timestamp where
     | .eq => compare a.nanoseconds b.nanoseconds
     | other => other
 
-instance : LT Timestamp := ltOfOrd
-instance : LE Timestamp := leOfOrd
+instance : LT Timestamp where
+  lt a b := a.seconds < b.seconds ∨ (a.seconds = b.seconds ∧ a.nanoseconds < b.nanoseconds)
+
+instance : LE Timestamp where
+  le a b := a.seconds < b.seconds ∨ (a.seconds = b.seconds ∧ a.nanoseconds ≤ b.nanoseconds)
+
+instance (a b : Timestamp) : Decidable (a < b) :=
+  inferInstanceAs (Decidable (a.seconds < b.seconds ∨ (a.seconds = b.seconds ∧ a.nanoseconds < b.nanoseconds)))
+
+instance (a b : Timestamp) : Decidable (a ≤ b) :=
+  inferInstanceAs (Decidable (a.seconds < b.seconds ∨ (a.seconds = b.seconds ∧ a.nanoseconds ≤ b.nanoseconds)))
 
 instance : Hashable Timestamp where
   hash ts := mixHash (hash ts.seconds) (hash ts.nanoseconds)

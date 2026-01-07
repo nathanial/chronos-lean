@@ -10,7 +10,7 @@ namespace Chronos
 structure Duration where
   /-- Total nanoseconds. Can be negative for backward time spans. -/
   nanoseconds : Int
-  deriving Repr, BEq, Inhabited
+  deriving Repr, BEq, Inhabited, DecidableEq
 
 namespace Duration
 
@@ -125,8 +125,14 @@ instance : HDiv Duration Nat Duration where hDiv d n := div d n
 instance : Ord Duration where
   compare a b := compare a.nanoseconds b.nanoseconds
 
-instance : LT Duration := ltOfOrd
-instance : LE Duration := leOfOrd
+instance : LT Duration where
+  lt a b := a.nanoseconds < b.nanoseconds
+
+instance : LE Duration where
+  le a b := a.nanoseconds ≤ b.nanoseconds
+
+instance (a b : Duration) : Decidable (a < b) := Int.decLt a.nanoseconds b.nanoseconds
+instance (a b : Duration) : Decidable (a ≤ b) := Int.decLe a.nanoseconds b.nanoseconds
 
 instance : Hashable Duration where
   hash d := hash d.nanoseconds

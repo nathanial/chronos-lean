@@ -590,13 +590,13 @@ test "Weekday.toNat gives correct values" := do
   Weekday.friday.toNat ≡ 5
   Weekday.saturday.toNat ≡ 6
 
-test "Weekday.ofNat roundtrips" := do
+test "Weekday.fromNat roundtrips" := do
   for i in [:7] do
-    (Weekday.ofNat i).toNat ≡ i
+    (Weekday.fromNat i).toNat ≡ i
 
-test "Weekday.ofNat wraps" := do
-  (Weekday.ofNat 7).toNat ≡ 6  -- wraps to saturday (default case)
-  (Weekday.ofNat 8).toNat ≡ 6  -- wraps to saturday (default case)
+test "Weekday.fromNat wraps" := do
+  (Weekday.fromNat 7).toNat ≡ 6  -- wraps to saturday (default case)
+  (Weekday.fromNat 8).toNat ≡ 6  -- wraps to saturday (default case)
 
 test "isWeekend identifies weekend days" := do
   shouldSatisfy Weekday.sunday.isWeekend "Sunday is weekend"
