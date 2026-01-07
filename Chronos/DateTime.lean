@@ -165,6 +165,37 @@ def daysInMonth (year : Int32) (month : UInt8) : UInt8 :=
   | _ => 0   -- Invalid month
 
 -- ============================================================================
+-- Validation
+-- ============================================================================
+
+/-- Check if a DateTime has valid field values.
+    - month: 1-12
+    - day: 1 to daysInMonth
+    - hour: 0-23
+    - minute: 0-59
+    - second: 0-59
+    - nanosecond: 0-999999999 -/
+def isValid (dt : DateTime) : Bool :=
+  dt.month >= 1 && dt.month <= 12 &&
+  dt.day >= 1 && dt.day <= daysInMonth dt.year dt.month &&
+  dt.hour <= 23 &&
+  dt.minute <= 59 &&
+  dt.second <= 59 &&
+  dt.nanosecond <= 999999999
+
+/-- Validate a DateTime, returning `some dt` if valid, `none` if invalid. -/
+def validate (dt : DateTime) : Option DateTime :=
+  if dt.isValid then some dt else none
+
+/-- Smart constructor that validates all fields.
+    Returns `some dt` if all fields are valid, `none` otherwise. -/
+def mk? (year : Int32) (month : UInt8) (day : UInt8)
+        (hour : UInt8 := 0) (minute : UInt8 := 0) (second : UInt8 := 0)
+        (nanosecond : UInt32 := 0) : Option DateTime :=
+  let dt : DateTime := { year, month, day, hour, minute, second, nanosecond }
+  dt.validate
+
+-- ============================================================================
 -- Comparison
 -- ============================================================================
 

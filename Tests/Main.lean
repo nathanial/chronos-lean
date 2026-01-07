@@ -285,6 +285,87 @@ test "add hours to timestamp" := do
 end TimestampDurationTests
 
 -- ============================================================================
+-- DateTime Validation Tests
+-- ============================================================================
+
+namespace ValidationTests
+
+testSuite "Chronos.DateTime.Validation"
+
+test "isValid accepts valid date" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  shouldSatisfy dt.isValid "valid date should pass"
+
+test "isValid rejects invalid month (0)" := do
+  let dt : DateTime := { year := 2025, month := 0, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "month 0 should be invalid"
+
+test "isValid rejects invalid month (13)" := do
+  let dt : DateTime := { year := 2025, month := 13, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "month 13 should be invalid"
+
+test "isValid rejects invalid day (0)" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 0, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "day 0 should be invalid"
+
+test "isValid rejects invalid day (32)" := do
+  let dt : DateTime := { year := 2025, month := 1, day := 32, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "day 32 in January should be invalid"
+
+test "isValid rejects Feb 30" := do
+  let dt : DateTime := { year := 2025, month := 2, day := 30, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "Feb 30 should be invalid"
+
+test "isValid accepts Feb 29 in leap year" := do
+  let dt : DateTime := { year := 2024, month := 2, day := 29, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  shouldSatisfy dt.isValid "Feb 29 in leap year should be valid"
+
+test "isValid rejects Feb 29 in non-leap year" := do
+  let dt : DateTime := { year := 2025, month := 2, day := 29, hour := 0, minute := 0, second := 0, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "Feb 29 in non-leap year should be invalid"
+
+test "isValid rejects invalid hour (24)" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 24, minute := 0, second := 0, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "hour 24 should be invalid"
+
+test "isValid rejects invalid minute (60)" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 12, minute := 60, second := 0, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "minute 60 should be invalid"
+
+test "isValid rejects invalid second (60)" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 12, minute := 30, second := 60, nanosecond := 0 }
+  shouldSatisfy (!dt.isValid) "second 60 should be invalid"
+
+test "validate returns some for valid date" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  match dt.validate with
+  | some _ => pure ()
+  | none => throw (IO.userError "validate should return some for valid date")
+
+test "validate returns none for invalid date" := do
+  let dt : DateTime := { year := 2025, month := 13, day := 15, hour := 12, minute := 30, second := 45, nanosecond := 0 }
+  match dt.validate with
+  | some _ => throw (IO.userError "validate should return none for invalid date")
+  | none => pure ()
+
+test "mk? returns some for valid inputs" := do
+  match DateTime.mk? 2025 6 15 12 30 45 with
+  | some dt =>
+    dt.year ≡ 2025
+    dt.month ≡ 6
+    dt.day ≡ 15
+  | none => throw (IO.userError "mk? should return some for valid inputs")
+
+test "mk? returns none for invalid inputs" := do
+  match DateTime.mk? 2025 13 15 with
+  | some _ => throw (IO.userError "mk? should return none for invalid month")
+  | none => pure ()
+
+#generate_tests
+
+end ValidationTests
+
+-- ============================================================================
 -- DateTime Parsing Tests
 -- ============================================================================
 

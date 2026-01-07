@@ -23,7 +23,7 @@ namespace Timestamp
 def epoch : Timestamp := { seconds := 0, nanoseconds := 0 }
 
 /-- One billion nanoseconds per second -/
-private def nanosPerSecond : UInt32 := 1000000000
+private def nanosPerSecond : Int := 1000000000
 
 -- ============================================================================
 -- FFI declarations
@@ -48,12 +48,12 @@ def fromSeconds (seconds : Int) : Timestamp :=
 
 /-- Convert to total nanoseconds since epoch. -/
 def toNanoseconds (ts : Timestamp) : Int :=
-  ts.seconds * 1000000000 + ts.nanoseconds.toNat
+  ts.seconds * nanosPerSecond + ts.nanoseconds.toNat
 
 /-- Create from total nanoseconds since epoch. -/
 def fromNanoseconds (nanos : Int) : Timestamp :=
-  let seconds := nanos / 1000000000
-  let remainingNanos := (nanos % 1000000000).toNat
+  let seconds := nanos / nanosPerSecond
+  let remainingNanos := (nanos % nanosPerSecond).toNat
   { seconds, nanoseconds := remainingNanos.toUInt32 }
 
 /-- Convert to floating-point seconds (may lose precision). -/
