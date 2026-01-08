@@ -1042,6 +1042,84 @@ test "Chronos.utc returns UTC timezone" := do
 end TimezoneTests
 
 -- ============================================================================
+-- EIO Error Handling Tests
+-- ============================================================================
+
+namespace EIOTests
+
+testSuite "Chronos.EIO"
+
+test "ChronosError.toString formats correctly" := do
+  let e1 := ChronosError.clockUnavailable "test"
+  e1.toString ≡ "Clock unavailable: test"
+
+  let e2 := ChronosError.invalidTimezone "Bad/Zone"
+  e2.toString ≡ "Invalid timezone: Bad/Zone"
+
+test "Timestamp.nowE succeeds" := do
+  match ← Timestamp.nowE.run with
+  | .ok ts =>
+    shouldSatisfy (ts.seconds > 0) "got valid timestamp"
+  | .error e =>
+    throw (IO.userError s!"nowE failed: {e}")
+
+test "DateTime.nowUtcE succeeds" := do
+  match ← DateTime.nowUtcE.run with
+  | .ok dt =>
+    shouldSatisfy (dt.year >= 2024) "got valid year"
+  | .error e =>
+    throw (IO.userError s!"nowUtcE failed: {e}")
+
+test "DateTime.nowLocalE succeeds" := do
+  match ← DateTime.nowLocalE.run with
+  | .ok dt =>
+    shouldSatisfy (dt.year >= 2024) "got valid year"
+  | .error e =>
+    throw (IO.userError s!"nowLocalE failed: {e}")
+
+test "DateTime.toTimestampE roundtrip" := do
+  let dt : DateTime := { year := 2025, month := 6, day := 15,
+                         hour := 12, minute := 30, second := 0, nanosecond := 0 }
+  match ← DateTime.toTimestampE dt |>.run with
+  | .ok ts =>
+    match ← DateTime.fromTimestampUtcE ts |>.run with
+    | .ok dt2 =>
+      dt2.year ≡ dt.year
+      dt2.month ≡ dt.month
+      dt2.day ≡ dt.day
+    | .error e => throw (IO.userError s!"fromTimestampUtcE failed: {e}")
+  | .error e => throw (IO.userError s!"toTimestampE failed: {e}")
+
+test "ChronosM.toIO converts to IO" := do
+  let action : ChronosM Timestamp := Timestamp.nowE
+  let ts ← action.toIO
+  shouldSatisfy (ts.seconds > 0) "toIO works"
+
+test "pre-epoch timestamp (-1) works correctly" := do
+  -- 1969-12-31 23:59:59 UTC has timestamp -1
+  let dt : DateTime := { year := 1969, month := 12, day := 31,
+                         hour := 23, minute := 59, second := 59, nanosecond := 0 }
+  match ← DateTime.toTimestampE dt |>.run with
+  | .ok ts =>
+    ts.seconds ≡ -1
+    ts.nanoseconds ≡ 0
+  | .error e => throw (IO.userError s!"toTimestampE failed for -1 timestamp: {e}")
+
+test "nowInTimezoneE succeeds" := do
+  match ← Timezone.fromName "America/New_York" with
+  | some tz =>
+    match ← DateTime.nowInTimezoneE tz |>.run with
+    | .ok dt =>
+      shouldSatisfy (dt.year >= 2024) "got valid year in timezone"
+    | .error e =>
+      throw (IO.userError s!"nowInTimezoneE failed: {e}")
+  | none => throw (IO.userError "Could not load timezone")
+
+#generate_tests
+
+end EIOTests
+
+-- ============================================================================
 -- Main
 -- ============================================================================
 

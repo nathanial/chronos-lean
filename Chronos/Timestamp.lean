@@ -4,6 +4,7 @@
 -/
 
 import Chronos.Duration
+import Chronos.Error
 
 namespace Chronos
 
@@ -41,6 +42,10 @@ private opaque nowFFI : IO (Int × UInt32)
 def now : IO Timestamp := do
   let (secs, nanos) ← nowFFI
   return { seconds := secs, nanoseconds := nanos }
+
+/-- Get the current wall clock time (EIO version with explicit error handling). -/
+def nowE : ChronosM Timestamp :=
+  ChronosM.liftIO now fun _ => ChronosError.clockUnavailable "clock_gettime failed"
 
 /-- Create a timestamp from just seconds (nanoseconds = 0). -/
 def fromSeconds (seconds : Int) : Timestamp :=

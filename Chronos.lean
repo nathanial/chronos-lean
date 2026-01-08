@@ -38,6 +38,7 @@
 -/
 
 import Chronos.Duration
+import Chronos.Error
 import Chronos.Timestamp
 import Chronos.DateTime
 import Chronos.Monotonic
@@ -91,5 +92,19 @@ def localTimezone : IO Timezone := Timezone.localTz
 
 /-- Get the current time in a specific timezone. -/
 def nowInTimezone (tz : Timezone) : IO DateTime := DateTime.nowInTimezone tz
+
+-- EIO convenience functions (explicit error handling)
+
+/-- Get the current wall clock time (EIO version). -/
+def nowE : ChronosM Timestamp := Timestamp.nowE
+
+/-- Get the current local date/time (EIO version). -/
+def nowLocalE : ChronosM DateTime := DateTime.nowLocalE
+
+/-- Get the current UTC date/time (EIO version). -/
+def nowUtcE : ChronosM DateTime := DateTime.nowUtcE
+
+/-- Get the current time in a specific timezone (EIO version). -/
+def nowInTimezoneE (tz : Timezone) : ChronosM DateTime := DateTime.nowInTimezoneE tz
 
 end Chronos

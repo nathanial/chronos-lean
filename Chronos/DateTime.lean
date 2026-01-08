@@ -104,6 +104,32 @@ def getTimezoneOffset : IO Int32 :=
   getTimezoneOffsetFFI
 
 -- ============================================================================
+-- EIO versions (explicit error handling)
+-- ============================================================================
+
+/-- Convert a timestamp to UTC date/time (EIO version). -/
+def fromTimestampUtcE (ts : Timestamp) : ChronosM DateTime :=
+  ChronosM.liftIO (fromTimestampUtc ts) fun _ => ChronosError.conversionFailed "gmtime_r failed"
+
+/-- Convert a timestamp to local date/time (EIO version). -/
+def fromTimestampLocalE (ts : Timestamp) : ChronosM DateTime :=
+  ChronosM.liftIO (fromTimestampLocal ts) fun _ => ChronosError.conversionFailed "localtime_r failed"
+
+/-- Convert a UTC date/time back to a timestamp (EIO version). -/
+def toTimestampE (dt : DateTime) : ChronosM Timestamp :=
+  ChronosM.liftIO (toTimestamp dt) fun _ => ChronosError.timestampFailed "timegm failed"
+
+/-- Get the current UTC date/time (EIO version). -/
+def nowUtcE : ChronosM DateTime := do
+  let ts ← Timestamp.nowE
+  fromTimestampUtcE ts
+
+/-- Get the current local date/time (EIO version). -/
+def nowLocalE : ChronosM DateTime := do
+  let ts ← Timestamp.nowE
+  fromTimestampLocalE ts
+
+-- ============================================================================
 -- Timezone conversions
 -- ============================================================================
 
@@ -185,6 +211,30 @@ def inTimezone (dt : DateTime) (tz : Timezone) : IO DateTime := do
 def nowInTimezone (tz : Timezone) : IO DateTime := do
   let ts ← Timestamp.now
   fromTimestampInTimezone ts tz
+
+-- ============================================================================
+-- Timezone EIO versions
+-- ============================================================================
+
+/-- Create a DateTime from a Timestamp in a specific timezone (EIO version). -/
+def fromTimestampInTimezoneE (ts : Timestamp) (tz : Timezone) : ChronosM DateTime :=
+  ChronosM.liftIO (fromTimestampInTimezone ts tz) fun _ =>
+    ChronosError.timezoneConversionFailed "localtime failed"
+
+/-- Convert a DateTime in a specific timezone to a UTC Timestamp (EIO version). -/
+def toTimestampInTimezoneE (dt : DateTime) (tz : Timezone) : ChronosM Timestamp :=
+  ChronosM.liftIO (toTimestampInTimezone dt tz) fun _ =>
+    ChronosError.timezoneConversionFailed "mktime failed"
+
+/-- Convert a UTC DateTime to another timezone (EIO version). -/
+def inTimezoneE (dt : DateTime) (tz : Timezone) : ChronosM DateTime := do
+  let ts ← toTimestampE dt
+  fromTimestampInTimezoneE ts tz
+
+/-- Get the current time in a specific timezone (EIO version). -/
+def nowInTimezoneE (tz : Timezone) : ChronosM DateTime := do
+  let ts ← Timestamp.nowE
+  fromTimestampInTimezoneE ts tz
 
 -- ============================================================================
 -- Formatting helpers

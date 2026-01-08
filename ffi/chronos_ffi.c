@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 /* ============================================================================
  * Platform detection for timezone APIs
@@ -177,11 +178,12 @@ LEAN_EXPORT lean_obj_res chronos_from_utc(
 
     /* timegm is a BSD/GNU extension that converts struct tm in UTC to time_t
      * On systems without timegm, we could use a portable workaround */
+    errno = 0;
     time_t t = timegm(&tm_input);
 
-    if (t == (time_t)-1) {
-        /* Note: -1 could be a valid timestamp (1969-12-31 23:59:59 UTC)
-         * but we'll treat it as an error for simplicity */
+    /* -1 is both a valid timestamp (1969-12-31 23:59:59 UTC) and an error indicator.
+     * We distinguish by checking errno: if errno is set, it's an error. */
+    if (t == (time_t)-1 && errno != 0) {
         return mk_io_error("timegm failed");
     }
 
@@ -578,6 +580,7 @@ LEAN_EXPORT lean_obj_res chronos_timezone_from_datetime(
     if (wrapper->is_utc) {
         /* UTC: use timegm */
         tm_input.tm_isdst = 0;
+        errno = 0;
         result = timegm(&tm_input);
     }
 #ifdef HAVE_LOCALTIME_RZ
@@ -600,6 +603,7 @@ LEAN_EXPORT lean_obj_res chronos_timezone_from_datetime(
         }
         tzset();
 
+        errno = 0;
         result = mktime(&tm_input);
 
         /* Restore TZ */
@@ -613,8 +617,11 @@ LEAN_EXPORT lean_obj_res chronos_timezone_from_datetime(
     }
 #endif
 
-    if (result == (time_t)-1) {
-        return mk_io_error("mktime failed");
+    /* -1 is both a valid timestamp and an error indicator.
+     * For UTC (timegm), we check errno. For local time (mktime), -1 with
+     * errno set indicates error. */
+    if (result == (time_t)-1 && errno != 0) {
+        return mk_io_error("mktime/timegm failed");
     }
 
     lean_obj_res seconds = lean_int64_to_int((int64_t)result);
