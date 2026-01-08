@@ -4,6 +4,7 @@
 -/
 
 import Chronos.Timestamp
+import Chronos.Timezone
 
 namespace Chronos
 
@@ -101,6 +102,89 @@ def nowLocal : IO DateTime := do
     Positive for east of UTC, negative for west. -/
 def getTimezoneOffset : IO Int32 :=
   getTimezoneOffsetFFI
+
+-- ============================================================================
+-- Timezone conversions
+-- ============================================================================
+
+/-- Raw FFI: Convert UTC timestamp to DateTime in specified timezone. -/
+@[extern "chronos_timezone_to_datetime"]
+private opaque toTimezoneFFI (tz : @& Timezone) (seconds : Int) (nanos : UInt32) : IO DateTimeTuple
+
+/-- Raw FFI: Convert DateTime in specified timezone to UTC timestamp. -/
+@[extern "chronos_timezone_from_datetime"]
+private opaque fromTimezoneFFI (tz : @& Timezone)
+  (year : Int32) (month : UInt8) (day : UInt8)
+  (hour : UInt8) (minute : UInt8) (second : UInt8)
+  (nanosecond : UInt32) : IO (Int × UInt32)
+
+/-- Create a DateTime from a Timestamp in a specific timezone.
+
+    Example:
+    ```
+    let ts ← Timestamp.now
+    match ← Timezone.fromName "America/New_York" with
+    | some tz =>
+      let nyTime ← DateTime.fromTimestampInTimezone ts tz
+      IO.println s!"New York: {nyTime}"
+    | none => IO.println "Invalid timezone"
+    ``` -/
+def fromTimestampInTimezone (ts : Timestamp) (tz : Timezone) : IO DateTime := do
+  let tuple ← toTimezoneFFI tz ts.seconds ts.nanoseconds
+  return fromTuple tuple
+
+/-- Convert a DateTime in a specific timezone to a UTC Timestamp.
+
+    Use this when you have a DateTime that represents local time in a
+    known timezone and need to convert it to an absolute point in time.
+
+    Example:
+    ```
+    -- Create a DateTime representing 2025-07-04 14:30 in Los Angeles
+    let dt : DateTime := { year := 2025, month := 7, day := 4,
+                           hour := 14, minute := 30, second := 0, nanosecond := 0 }
+    match ← Timezone.fromName "America/Los_Angeles" with
+    | some tz =>
+      let ts ← dt.toTimestampInTimezone tz
+      IO.println s!"UTC timestamp: {ts.seconds}"
+    | none => IO.println "Invalid timezone"
+    ``` -/
+def toTimestampInTimezone (dt : DateTime) (tz : Timezone) : IO Timestamp := do
+  let (secs, nanos) ← fromTimezoneFFI tz dt.year dt.month dt.day
+                                       dt.hour dt.minute dt.second dt.nanosecond
+  return { seconds := secs, nanoseconds := nanos }
+
+/-- Convert a UTC DateTime to another timezone.
+
+    This assumes the input DateTime represents a time in UTC. The returned
+    DateTime represents the same instant in the specified timezone.
+
+    Example:
+    ```
+    let utcTime ← DateTime.nowUtc
+    match ← Timezone.fromName "Europe/London" with
+    | some tz =>
+      let londonTime ← utcTime.inTimezone tz
+      IO.println s!"London: {londonTime}"
+    | none => IO.println "Invalid timezone"
+    ``` -/
+def inTimezone (dt : DateTime) (tz : Timezone) : IO DateTime := do
+  let ts ← dt.toTimestamp
+  fromTimestampInTimezone ts tz
+
+/-- Get the current time in a specific timezone.
+
+    Example:
+    ```
+    match ← Timezone.fromName "Asia/Tokyo" with
+    | some tz =>
+      let tokyoTime ← DateTime.nowInTimezone tz
+      IO.println s!"Tokyo: {tokyoTime}"
+    | none => IO.println "Invalid timezone"
+    ``` -/
+def nowInTimezone (tz : Timezone) : IO DateTime := do
+  let ts ← Timestamp.now
+  fromTimestampInTimezone ts tz
 
 -- ============================================================================
 -- Formatting helpers

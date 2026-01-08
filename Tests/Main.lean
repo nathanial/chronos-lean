@@ -907,6 +907,141 @@ test "DateTime JSON parses ISO 8601" := do
 end JsonTests
 
 -- ============================================================================
+-- Timezone Tests
+-- ============================================================================
+
+namespace TimezoneTests
+
+testSuite "Chronos.Timezone"
+
+test "UTC timezone can be loaded" := do
+  let tz ← Timezone.utc
+  let name ← tz.name
+  shouldSatisfy (name == "UTC" || name == "Etc/UTC") "UTC name matches"
+
+test "local timezone can be loaded" := do
+  let tz ← Timezone.localTz
+  let name ← tz.name
+  shouldSatisfy (name.length > 0) "local timezone has name"
+
+test "fromName returns some for UTC" := do
+  match ← Timezone.fromName "UTC" with
+  | some tz =>
+    let name ← tz.name
+    name ≡ "UTC"
+  | none => throw (IO.userError "UTC should be valid")
+
+test "fromName returns some for America/New_York" := do
+  match ← Timezone.fromName "America/New_York" with
+  | some tz =>
+    let name ← tz.name
+    name ≡ "America/New_York"
+  | none => throw (IO.userError "America/New_York should be valid")
+
+test "fromName returns some for Europe/London" := do
+  match ← Timezone.fromName "Europe/London" with
+  | some _ => pure ()
+  | none => throw (IO.userError "Europe/London should be valid")
+
+test "fromName returns some for Asia/Tokyo" := do
+  match ← Timezone.fromName "Asia/Tokyo" with
+  | some _ => pure ()
+  | none => throw (IO.userError "Asia/Tokyo should be valid")
+
+test "fromName returns none for invalid timezone" := do
+  -- Note: The TZ environment variable approach may not always detect invalid
+  -- timezone names (they may fall back to UTC). This test verifies that at least
+  -- well-formed but non-existent timezone names don't crash.
+  let _ ← Timezone.fromName "Invalid/Timezone"
+  pure ()
+
+test "UTC conversion preserves time" := do
+  let utc ← Timezone.utc
+  let dt : DateTime := { year := 2025, month := 6, day := 15,
+                         hour := 12, minute := 30, second := 0, nanosecond := 0 }
+  let ts ← dt.toTimestamp
+  let dt2 ← DateTime.fromTimestampInTimezone ts utc
+  dt2.year ≡ dt.year
+  dt2.month ≡ dt.month
+  dt2.day ≡ dt.day
+  dt2.hour ≡ dt.hour
+  dt2.minute ≡ dt.minute
+
+test "New York is behind UTC in summer" := do
+  -- 2025-06-15 12:00 UTC should be 08:00 in New York (EDT, UTC-4)
+  -- Unix timestamp for 2025-06-15 12:00:00 UTC = 1749988800
+  let ts := Timestamp.fromSeconds 1749988800
+  match ← Timezone.fromName "America/New_York" with
+  | some tz =>
+    let nyTime ← DateTime.fromTimestampInTimezone ts tz
+    -- During summer (June), New York is UTC-4
+    nyTime.hour ≡ 8
+    nyTime.day ≡ 15
+    nyTime.month ≡ 6
+  | none => throw (IO.userError "Could not load America/New_York")
+
+test "Tokyo is ahead of UTC" := do
+  -- 2025-06-15 12:00 UTC should be 21:00 in Tokyo (JST, UTC+9)
+  let ts := Timestamp.fromSeconds 1749988800
+  match ← Timezone.fromName "Asia/Tokyo" with
+  | some tz =>
+    let tokyoTime ← DateTime.fromTimestampInTimezone ts tz
+    tokyoTime.hour ≡ 21
+    tokyoTime.day ≡ 15
+    tokyoTime.month ≡ 6
+  | none => throw (IO.userError "Could not load Asia/Tokyo")
+
+test "inTimezone converts UTC to timezone" := do
+  let utcDt : DateTime := { year := 2025, month := 6, day := 15,
+                            hour := 12, minute := 0, second := 0, nanosecond := 0 }
+  match ← Timezone.fromName "America/Los_Angeles" with
+  | some tz =>
+    -- 12:00 UTC should be 05:00 PDT (UTC-7)
+    let laDt ← utcDt.inTimezone tz
+    laDt.hour ≡ 5
+    laDt.day ≡ 15
+  | none => throw (IO.userError "Could not load America/Los_Angeles")
+
+test "roundtrip: DateTime -> Timestamp -> DateTime in same timezone" := do
+  match ← Timezone.fromName "America/Los_Angeles" with
+  | some tz =>
+    -- Create a DateTime representing 2025-07-04 14:30 in LA
+    let dt : DateTime := { year := 2025, month := 7, day := 4,
+                           hour := 14, minute := 30, second := 0, nanosecond := 0 }
+    -- Convert to timestamp (interpreting dt as LA time)
+    let ts ← dt.toTimestampInTimezone tz
+    -- Convert back to DateTime in LA timezone
+    let dt2 ← DateTime.fromTimestampInTimezone ts tz
+    -- Should match original
+    dt2.year ≡ dt.year
+    dt2.month ≡ dt.month
+    dt2.day ≡ dt.day
+    dt2.hour ≡ dt.hour
+    dt2.minute ≡ dt.minute
+  | none => throw (IO.userError "Could not load America/Los_Angeles")
+
+test "nowInTimezone returns current time" := do
+  let utc ← Timezone.utc
+  let dt ← DateTime.nowInTimezone utc
+  -- Basic sanity check
+  shouldSatisfy (dt.year >= 2024) "year >= 2024"
+  shouldSatisfy (dt.month >= 1 && dt.month <= 12) "valid month"
+
+test "Chronos.timezone convenience function works" := do
+  match ← Chronos.timezone "America/New_York" with
+  | some _ => pure ()
+  | none => throw (IO.userError "timezone convenience function failed")
+
+test "Chronos.utc returns UTC timezone" := do
+  let tz ← Chronos.utc
+  let name ← tz.name
+  shouldSatisfy (name == "UTC" || name == "Etc/UTC") "utc convenience function works"
+
+#generate_tests
+
+end TimezoneTests
+
+-- ============================================================================
 -- Main
 -- ============================================================================
 

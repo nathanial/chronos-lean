@@ -41,6 +41,7 @@ import Chronos.Duration
 import Chronos.Timestamp
 import Chronos.DateTime
 import Chronos.Monotonic
+import Chronos.Timezone
 
 namespace Chronos
 
@@ -76,5 +77,19 @@ def timeAction (action : IO α) : IO (α × Duration) := time action
 
 /-- Run an action N times and return the average duration. -/
 def benchmarkAction (n : Nat) (action : IO α) : IO Duration := benchmark n action
+
+-- Timezone utilities
+
+/-- Load a timezone by IANA name (e.g., "America/New_York"). -/
+def timezone (name : String) : IO (Option Timezone) := Timezone.fromName name
+
+/-- The UTC timezone. -/
+def utc : IO Timezone := Timezone.utc
+
+/-- The local system timezone. -/
+def localTimezone : IO Timezone := Timezone.localTz
+
+/-- Get the current time in a specific timezone. -/
+def nowInTimezone (tz : Timezone) : IO DateTime := DateTime.nowInTimezone tz
 
 end Chronos
