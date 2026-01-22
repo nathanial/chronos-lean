@@ -93,7 +93,7 @@ test "pre-epoch date (1960) roundtrip" := do
   ts2.seconds ≡ ts.seconds
   ts2.nanoseconds ≡ ts.nanoseconds
 
-#generate_tests
+
 
 -- ============================================================================
 -- DateTime Tests
@@ -187,7 +187,7 @@ test "getTimezoneOffset returns reasonable value" := do
   shouldSatisfy (offset >= -43200) "offset >= -43200"
   shouldSatisfy (offset <= 50400) "offset <= 50400"
 
-#generate_tests
+
 
 end DateTimeTests
 
@@ -273,7 +273,7 @@ test "abs works" := do
   d.abs.toHours ≡ 5
   shouldSatisfy d.abs.isPositive "abs is positive"
 
-#generate_tests
+
 
 end DurationTests
 
@@ -315,7 +315,7 @@ test "add hours to timestamp" := do
   let result := ts + d
   result.seconds ≡ 3600
 
-#generate_tests
+
 
 end TimestampDurationTests
 
@@ -396,7 +396,7 @@ test "mk? returns none for invalid inputs" := do
   | some _ => throw (IO.userError "mk? should return none for invalid month")
   | none => pure ()
 
-#generate_tests
+
 
 end ValidationTests
 
@@ -494,7 +494,7 @@ test "parseTime with nanoseconds" := do
   | .ok dt => dt.nanosecond ≡ 500000000
   | .error e => throw (IO.userError s!"parse failed: {e}")
 
-#generate_tests
+
 
 end ParsingTests
 
@@ -629,7 +629,7 @@ test "addDuration crosses day" := do
   result.day ≡ 2
   result.hour ≡ 6
 
-#generate_tests
+
 
 end ArithmeticTests
 
@@ -683,7 +683,7 @@ test "benchmark with zero iterations returns zero" := do
   let avg ← Chronos.benchmark 0 (pure ())
   shouldSatisfy avg.isZero "zero iterations gives zero duration"
 
-#generate_tests
+
 
 end MonotonicTests
 
@@ -776,7 +776,7 @@ test "DateTime.weekOfYear for first week" := do
   let woy ← dt.weekOfYear
   shouldSatisfy (woy >= 1 && woy <= 53) "week of year in range 1-53"
 
-#generate_tests
+
 
 end WeekdayTests
 
@@ -826,7 +826,7 @@ test "Weekday hash is consistent" := do
 test "Weekday hash differs for different days" := do
   shouldSatisfy (hash Weekday.monday != hash Weekday.friday) "different weekdays have different hashes"
 
-#generate_tests
+
 
 end HashableTests
 
@@ -902,7 +902,7 @@ test "DateTime JSON parses ISO 8601" := do
     dt.second ≡ 0
   | .error e => throw (IO.userError s!"fromJson failed: {e}")
 
-#generate_tests
+
 
 end JsonTests
 
@@ -1037,7 +1037,7 @@ test "Chronos.utc returns UTC timezone" := do
   let name ← tz.name
   shouldSatisfy (name == "UTC" || name == "Etc/UTC") "utc convenience function works"
 
-#generate_tests
+
 
 end TimezoneTests
 
@@ -1115,7 +1115,7 @@ test "nowInTimezoneE succeeds" := do
       throw (IO.userError s!"nowInTimezoneE failed: {e}")
   | none => throw (IO.userError "Could not load timezone")
 
-#generate_tests
+
 
 end EIOTests
 
