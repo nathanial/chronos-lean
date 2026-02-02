@@ -198,7 +198,7 @@ def toIso8601 (d : Duration) : String :=
     if secs > 0 || nanos > 0 || (days == 0 && hours == 0 && mins == 0) then
       if nanos > 0 then
         let fracStr := toString nanos
-        let padded := String.mk (List.replicate (9 - fracStr.length) '0') ++ fracStr
+        let padded := String.ofList (List.replicate (9 - fracStr.length) '0') ++ fracStr
         -- Trim trailing zeros
         let trimmed := padded.dropRightWhile (· == '0')
         s!"{secs}.{trimmed}S"

@@ -515,32 +515,38 @@ private def optionToExcept (o : Option α) (msg : String) : Except String α :=
 
 /-- Parse exactly n decimal digits starting at position, return (value, newPos). -/
 private def parseDigits (s : String) (start : Nat) (count : Nat) : Option (Nat × Nat) :=
-  if start + count > s.length then none
+  let data := s.toList
+  if start + count > data.length then none
   else
-    let chars := (List.range count).map fun i => s.get ⟨start + i⟩
-    if chars.all Char.isDigit then
+    let chars := (List.range count).filterMap fun i => data[start + i]?
+    if chars.length == count && chars.all Char.isDigit then
       let value := chars.foldl (fun acc c => acc * 10 + (c.toNat - '0'.toNat)) 0
       some (value, start + count)
     else none
 
 /-- Expect a specific character at position, return new position. -/
 private def expectChar (s : String) (pos : Nat) (c : Char) : Option Nat :=
-  if pos < s.length && s.get ⟨pos⟩ == c then some (pos + 1) else none
+  let data := s.toList
+  match data[pos]? with
+  | some ch => if ch == c then some (pos + 1) else none
+  | none => none
 
 /-- Parse fractional seconds (.NNNNNNNNN), returning (nanoseconds, newPos). -/
 private def parseFractionalSeconds (s : String) (pos : Nat) : Nat × Nat :=
+  let data := s.toList
   -- Read up to 9 digits iteratively
   let rec go (p : Nat) (count : Nat) (acc : Nat) : Nat × Nat :=
     if count >= 9 then (acc, p)
-    else if p >= s.length then
-      -- Pad remaining with zeros
-      let remaining := 9 - count
-      (acc * (10 ^ remaining), p)
     else
-      let c := s.get ⟨p⟩
-      if c.isDigit then
-        go (p + 1) (count + 1) (acc * 10 + (c.toNat - '0'.toNat))
-      else
+      match data[p]? with
+      | some c =>
+        if c.isDigit then
+          go (p + 1) (count + 1) (acc * 10 + (c.toNat - '0'.toNat))
+        else
+          -- Pad remaining with zeros
+          let remaining := 9 - count
+          (acc * (10 ^ remaining), p)
+      | none =>
         -- Pad remaining with zeros
         let remaining := 9 - count
         (acc * (10 ^ remaining), p)
@@ -579,7 +585,9 @@ def parseIso8601 (s : String) : ParseResult DateTime := do
              hour := 0, minute := 0, second := 0, nanosecond := 0 }
 
   -- Parse T or space separator
-  let separator := s.get ⟨pos⟩
+  let separator := match s.toList[pos]? with
+    | some c => c
+    | none => ' ' -- Will fail the check below
   if separator != 'T' && separator != ' ' then
     throw s!"expected 'T' or space after date, got '{separator}'"
   let pos := pos + 1
@@ -596,7 +604,7 @@ def parseIso8601 (s : String) : ParseResult DateTime := do
 
   -- Parse optional fractional seconds
   let (nanosecond, _pos) :=
-    if pos < s.length && s.get ⟨pos⟩ == '.' then
+    if s.toList[pos]? == some '.' then
       parseFractionalSeconds s (pos + 1)
     else (0, pos)
 
@@ -630,7 +638,7 @@ def parseTime (s : String) : ParseResult DateTime := do
 
   -- Parse optional fractional seconds
   let (nanosecond, _) :=
-    if pos < s.length && s.get ⟨pos⟩ == '.' then
+    if s.toList[pos]? == some '.' then
       parseFractionalSeconds s (pos + 1)
     else (0, pos)
 
